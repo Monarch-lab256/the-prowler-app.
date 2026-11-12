@@ -1,0 +1,60 @@
+
+name: Build The Prowler APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'THE-PROWLER-WHOLE-LOTTA-RED.zip'
+      - '.github/workflows/build-apk.yml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Extract website
+        run: |
+          unzip THE-PROWLER-WHOLE-LOTTA-RED.zip -d extracted
+          WEB_DIR=$(find extracted -type f -name index.html | head -n 1 | xargs dirname)
+          if [ -z "$WEB_DIR" ]; then
+            echo "Could not find index.html"
+            exit 1
+          fi
+          mkdir -p www
+          cp -r "$WEB_DIR"/. www/
+
+      - name: Prepare Capacitor
+        run: |
+          npm init -y
+          npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7
+          npx cap init "THE PROWLER" "com.monarchlab.prowler" --web-dir www
+          npx cap add android
+          npx cap sync android
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Save APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: THE-PROWLER-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          
