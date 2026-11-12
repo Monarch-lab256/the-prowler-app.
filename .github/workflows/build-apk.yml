@@ -1,0 +1,92 @@
+
+name: Build The Prowler APK
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'THE-PROWLER-WHOLE-LOTTA-RED-1.zip'
+      - '.github/workflows/build-apk.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout project
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Extract website
+        run: |
+          ZIP_FILE="THE-PROWLER-WHOLE-LOTTA-RED-1.zip"
+
+          if [ ! -f "$ZIP_FILE" ]; then
+            echo "ERROR: $ZIP_FILE was not found in the repository root."
+            echo "Files in repository:"
+            ls -la
+            exit 1
+          fi
+
+          mkdir -p extracted
+          unzip -q "$ZIP_FILE" -d extracted
+
+          WEB_DIR=$(find extracted -type f -name index.html -print -quit | xargs -r dirname)
+
+          if [ -z "$WEB_DIR" ]; then
+            echo "ERROR: No index.html was found inside the ZIP."
+            find extracted -maxdepth 4 -type f | head -100
+            exit 1
+          fi
+
+          mkdir -p www
+          cp -R "$WEB_DIR"/. www/
+
+          echo "Website files copied successfully."
+          ls -la www
+
+      - name: Install Capacitor
+        run: |
+          npm init -y
+          npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7
+
+          cat > capacitor.config.json <<'EOF'
+          {
+            "appId": "com.monarchlab.prowler",
+            "appName": "THE PROWLER",
+            "webDir": "www"
+          }
+          EOF
+
+      - name: Add Android platform
+        run: |
+          npx cap add android
+          npx cap sync android
+
+      - name: Build APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: THE-PROWLER-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+          
